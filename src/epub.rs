@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, io::{BufReader, Read, Seek}};
+use std::{collections::HashMap, io::{BufReader, Read, Seek}};
 
 use quick_xml::{Reader, events::Event};
 use zip::{ZipArchive, read::ZipFile};
@@ -13,7 +13,7 @@ pub struct EpubBook {
 }
 
 impl EpubBook {
-    pub fn new(reader: impl Read + Seek) -> Result<EpubBook, Box<dyn Error>> {
+    pub fn new(reader: impl Read + Seek) -> Result<EpubBook, EpubError> {
         let mut zip_archive = ZipArchive::new(reader)?;
         let container = zip_archive.by_name("META-INF/container.xml")?;
 
@@ -47,17 +47,15 @@ where R: Read
     let mut buf = vec![];
 
     loop {
-        match reader.read_event_into(&mut buf) {
-            Err(e) => return Err(EpubError::Xml(e)),
-            Ok(Event::Eof) => break,
-            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+        match reader.read_event_into(&mut buf)? {
+            Event::Eof => break,
+            Event::Start(e) | Event::Empty(e) => {
                 if e.name().as_ref() == b"rootfile" {
                     for attr in e.attributes() {
                         let attr = attr.map_err(|e| EpubError::Xml(e.into()))?;
                         if attr.key.local_name().as_ref() == b"full-path" {
                             let path = attr
-                                .decode_and_unescape_value(reader.decoder())
-                                .map_err(EpubError::Xml)?
+                                .decode_and_unescape_value(reader.decoder())?
                                 .into_owned();
 
                             return Ok(path);

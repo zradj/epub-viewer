@@ -1,8 +1,8 @@
-use std::{error::Error, fs::File};
+use std::fs::File;
 
-use epub_viewer::epub::EpubBook;
+use epub_viewer::{epub::EpubBook, error::EpubError};
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), EpubError> {
     let book_file = File::open("book.epub")?;
     let book = EpubBook::new(book_file)?;
 
