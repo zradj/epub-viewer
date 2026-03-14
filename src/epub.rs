@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, io::{Read, Seek}};
+use std::{collections::HashMap, error::Error, io::{BufReader, Read, Seek}};
 
 use quick_xml::{Reader, events::Event};
 use zip::{ZipArchive, read::ZipFile};
@@ -15,12 +15,11 @@ pub struct EpubBook {
 impl EpubBook {
     pub fn new(reader: impl Read + Seek) -> Result<EpubBook, Box<dyn Error>> {
         let mut zip_archive = ZipArchive::new(reader)?;
-        let mut container = zip_archive.by_name("META-INF/container.xml")?;
+        let container = zip_archive.by_name("META-INF/container.xml")?;
 
-        let mut contents = String::new();
-        container.read_to_string(&mut contents)?;
+        let root_file_name = get_root_file_name_from_container(container)?;
 
-        println!("{}", contents);
+        println!("{root_file_name}");
         todo!();
     }
 }
@@ -40,34 +39,35 @@ pub struct EpubResource {
     pub content: Vec<u8>,
 }
 
-fn get_root_file_name_from_container<R>(mut container: ZipFile<'_, R>) -> Result<String, EpubError>
+pub fn get_root_file_name_from_container<R>(container: ZipFile<'_, R>) -> Result<String, EpubError>
 where R: Read
 {
-    let mut content = String::new();
-    container.read_to_string(&mut content)?;
+    let buf_reader = BufReader::new(container);
+    let mut reader = Reader::from_reader(buf_reader);
+    let mut buf = vec![];
 
-    let mut reader = Reader::from_str(&content);
     loop {
-        match reader.read_event() {
+        match reader.read_event_into(&mut buf) {
             Err(e) => return Err(EpubError::Xml(e)),
-            Ok(Event::Eof) => return Err(EpubError::RootfileNotFound),
+            Ok(Event::Eof) => break,
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
                 if e.name().as_ref() == b"rootfile" {
                     for attr in e.attributes() {
-                        let attr = attr.map_err(|e| EpubError::Xml(quick_xml::Error::InvalidAttr(e)))?;
+                        let attr = attr.map_err(|e| EpubError::Xml(e.into()))?;
                         if attr.key.local_name().as_ref() == b"full-path" {
-                            return Ok(
-                                str::from_utf8(&attr.value)
-                                    .map_err(|e| EpubError::Utf8 { context: "rootfile path", source: e })?
-                                    .to_string()
-                            )
+                            let path = attr
+                                .decode_and_unescape_value(reader.decoder())
+                                .map_err(EpubError::Xml)?
+                                .into_owned();
+
+                            return Ok(path);
                         }
                     }
-
-                    return Err(EpubError::RootfileNotFound);
                 }
             },
             _ => (),
         }
     }
+
+    Err(EpubError::RootfileNotFound)
 }
