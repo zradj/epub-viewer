@@ -8,6 +8,8 @@ pub enum EpubError {
     Zip(#[from] zip::result::ZipError),
     #[error("XML Parsing Error: {0}")]
     Xml(#[from] roxmltree::Error),
+    #[error("Missing attribute '{attr}' on manifest item")]
+    MissingAttribute { attr: &'static str },
     #[error("Could not find the OPF rootfile")]
     RootfileNotFound,
 }
