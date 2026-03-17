@@ -31,12 +31,13 @@ impl EpubBook {
         root_file.read_to_string(&mut root_content)?;
 
         let mut metadata = EpubMetadata::default();
+        let mut resources = RefCell::new(HashMap::new());
 
         let root_doc = roxmltree::Document::parse(&root_content)?;
         for child in root_doc.root_element().children() {
             match child.tag_name().name() {
                 "metadata" => metadata = EpubMetadata::from(&child),
-                "manifest" => 
+                "manifest" => resources = Self::read_manifest(&child)?,
                 _ => (),
             }
         }
