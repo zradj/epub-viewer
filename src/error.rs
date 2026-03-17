@@ -7,7 +7,9 @@ pub enum EpubError {
     #[error("Failed to read ZIP archive: {0}")]
     Zip(#[from] zip::result::ZipError),
     #[error("XML Parsing Error: {0}")]
-    Xml(#[from] quick_xml::Error),
+    Xml(#[from] roxmltree::Error),
     #[error("Could not find the OPF rootfile")]
     RootfileNotFound,
 }
+
+pub type EpubResult<T> = Result<T, EpubError>;
