@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fs::File, io::Read, rc::Rc};
+use std::{collections::HashMap, fs::File, io::Read};
 
 use zip::{ZipArchive, read::ZipFile};
 
@@ -8,8 +8,8 @@ use crate::error::{EpubError, EpubResult};
 pub struct EpubBook {
     pub metadata: EpubMetadata,
     pub spine: Vec<String>,
-    resources: RefCell<HashMap<String, Rc<RefCell<EpubResource>>>>,
-    archive: RefCell<ZipArchive<File>>,
+    resources: HashMap<String, EpubResource>,
+    archive: ZipArchive<File>,
 }
 
 impl EpubBook {
@@ -66,21 +66,18 @@ impl EpubBook {
         Ok(EpubBook {
             metadata,
             spine,
-            resources: RefCell::new(resources),
-            archive: RefCell::new(archive),
+            resources,
+            archive,
         })
     }
 
-    pub fn get_resource(&self, id: &str) -> EpubResult<Rc<RefCell<EpubResource>>> {
-        let resources = self.resources.borrow_mut();
-        let rc_resource = resources
-            .get(id)
+    pub fn get_resource(&mut self, id: &str) -> EpubResult<&EpubResource> {
+        let resource = self.resources
+            .get_mut(id)
             .ok_or(EpubError::ResourceNotFound(String::from(id)))?;
-        let mut resource = rc_resource.borrow_mut();
 
         if resource.content.is_none() {
-            let mut archive = self.archive.borrow_mut();
-            let mut resource_file = archive.by_name(&resource.path)?;
+            let mut resource_file = self.archive.by_name(&resource.path)?;
 
             let mut buf = vec![];
             resource_file.read_to_end(&mut buf)?;
@@ -88,7 +85,7 @@ impl EpubBook {
             resource.content = Some(buf);
         }
 
-        Ok(Rc::clone(rc_resource))
+        Ok(resource)
     }
 
     fn verify_mimetype(mime_file: &mut ZipFile<'_, File>) -> EpubResult<()> {
@@ -118,7 +115,7 @@ impl EpubBook {
     fn read_manifest(
         xml_manifest: &roxmltree::Node<'_, '_>,
         base_path: &str,
-    ) -> EpubResult<HashMap<String, Rc<RefCell<EpubResource>>>> {
+    ) -> EpubResult<HashMap<String, EpubResource>> {
         let mut res = HashMap::new();
 
         for child in xml_manifest.children() {
@@ -139,7 +136,7 @@ impl EpubBook {
                 let media_type = String::from(media_type);
 
                 res.insert(
-                    id, Rc::new(RefCell::new(EpubResource { path, media_type, content: None }))
+                    id, EpubResource { path, media_type, content: None }
                 );
             }
         }
