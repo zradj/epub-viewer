@@ -118,19 +118,12 @@ impl EpubBook {
         for child in xml_manifest.children() {
             if child.tag_name().name() == "item" {
                 // TODO: implement error tolerance
-                let href = child.attribute("href").ok_or(
-                    EpubError::MissingAttribute { attr: "href", loc: "manifest item" }
-                )?;
-                let id = child.attribute("id").ok_or(
-                    EpubError::MissingAttribute { attr: "id", loc: "manifest item" }
-                )?;
-                let media_type = child.attribute("media-type").ok_or(
-                    EpubError::MissingAttribute { attr: "media-type", loc: "manifest item" }
-                )?;
+                let get_attr = |attr| child.attribute(attr)
+                    .ok_or(EpubError::MissingAttribute { attr, loc: "manifest item" });
 
-                let path = format!("{base_path}{href}");
-                let id = String::from(id);
-                let media_type = String::from(media_type);
+                let path = format!("{}{}", base_path, get_attr("href")?);
+                let id = String::from(get_attr("id")?);
+                let media_type = String::from(get_attr("media-type")?);
 
                 res.insert(
                     id, EpubResource { path, media_type, content: None }
