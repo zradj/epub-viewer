@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, fs::File, io::Read, rc::Rc};
 
-use zip::ZipArchive;
+use zip::{ZipArchive, read::ZipFile};
 
 use crate::error::{EpubError, EpubResult};
 
@@ -16,6 +16,15 @@ impl EpubBook {
     pub fn new(path: &str) -> EpubResult<Self> {
         let archive = File::open(path)?;
         let mut archive = ZipArchive::new(archive)?;
+
+        let mime_result = archive
+            .by_name("mimetype")
+            .map_err(EpubError::from)
+            .and_then(|mut f| Self::verify_mimetype(&mut f));
+        
+        if let Err(e) = mime_result {
+            eprintln!("[Warning] {e}");
+        }
 
         let root_path = {
             let mut container_file = archive.by_name("META-INF/container.xml")?;
@@ -85,6 +94,17 @@ impl EpubBook {
         };
 
         Ok(content)
+    }
+
+    fn verify_mimetype(mime_file: &mut ZipFile<'_, File>) -> EpubResult<()> {
+        let mut content = String::new();
+        mime_file.read_to_string(&mut content)?;
+
+        if content.trim() != "application/epub+zip" {
+            return Err(EpubError::IncorrectMimeType);
+        }
+
+        Ok(())
     }
 
     fn extract_root_path(container: &roxmltree::Document) -> EpubResult<String> {

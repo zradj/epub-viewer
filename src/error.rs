@@ -14,6 +14,8 @@ pub enum EpubError {
     ResourceNotFound(String),
     #[error("Could not find the OPF rootfile")]
     RootfileNotFound,
+    #[error("Incorrect MIME type")]
+    IncorrectMimeType,
 }
 
 pub type EpubResult<T> = Result<T, EpubError>;
