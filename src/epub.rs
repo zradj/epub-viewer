@@ -26,23 +26,40 @@ impl EpubBook {
             Self::extract_root_path(&container_doc)?
         };
 
-        let mut root_file = archive.by_name(&root_path)?;
-        let mut root_content = String::new();
-        root_file.read_to_string(&mut root_content)?;
+        let base_path = match root_path.rfind('/') {
+            Some(i) => &root_path[..=i],
+            None => "",
+        };
+
+        let root_content = {
+            let mut root_file = archive.by_name(&root_path)?;
+            let mut root_content = String::new();
+            root_file.read_to_string(&mut root_content)?;
+
+            root_content
+        };
 
         let mut metadata = EpubMetadata::default();
-        let mut resources = RefCell::new(HashMap::new());
+        let mut resources = HashMap::new();
+        let mut spine = vec![];
 
         let root_doc = roxmltree::Document::parse(&root_content)?;
         for child in root_doc.root_element().children() {
             match child.tag_name().name() {
                 "metadata" => metadata = EpubMetadata::from(&child),
-                "manifest" => resources = Self::read_manifest(&child)?,
+                "manifest" => resources = Self::read_manifest(&child, base_path)?,
+                // TODO: check "toc" atrribute
+                "spine" => spine = Self::read_spine(&child)?,
                 _ => (),
             }
         }
 
-        todo!();
+        Ok(EpubBook {
+            metadata,
+            spine,
+            resources: RefCell::new(resources),
+            archive: RefCell::new(archive),
+        })
     }
 
     fn extract_root_path(container: &roxmltree::Document) -> EpubResult<String> {
@@ -60,42 +77,62 @@ impl EpubBook {
 
     fn read_manifest(
         xml_manifest: &roxmltree::Node<'_, '_>,
-    ) -> EpubResult<RefCell<HashMap<String, EpubResource>>> {
+        base_path: &str,
+    ) -> EpubResult<HashMap<String, EpubResource>> {
         let mut res = HashMap::new();
 
         for child in xml_manifest.children() {
             if child.tag_name().name() == "item" {
                 // TODO: implement error tolerance
                 let href = child.attribute("href").ok_or(
-                    EpubError::MissingAttribute { attr: "href" }
+                    EpubError::MissingAttribute { attr: "href", loc: "manifest item" }
                 )?;
-                let id = child.attribute("id").ok_or(EpubError::MissingAttribute { attr: "id" })?;
+                let id = child.attribute("id").ok_or(
+                    EpubError::MissingAttribute { attr: "id", loc: "manifest item" }
+                )?;
                 let media_type = child.attribute("media-type").ok_or(
-                    EpubError::MissingAttribute { attr: "media-type" }
+                    EpubError::MissingAttribute { attr: "media-type", loc: "manifest item" }
                 )?;
 
-                let href = String::from(href);
+                let path = format!("{base_path}{href}");
                 let id = String::from(id);
                 let media_type = String::from(media_type);
 
-                res.insert(id, EpubResource { path: href, media_type, content: None });
+                res.insert(id, EpubResource { path, media_type, content: None });
             }
         }
 
-        Ok(RefCell::new(res))
+        Ok(res)
+    }
+
+    fn read_spine(xml_spine: &roxmltree::Node<'_, '_>) -> EpubResult<Vec<String>> {
+        let mut res = vec![];
+
+        for child in xml_spine.children() {
+            if child.tag_name().name() == "itemref" {
+                let idref = child.attribute("idref").ok_or(
+                    EpubError::MissingAttribute { attr: "idref", loc: "spine item" }
+                )?;
+
+                res.push(String::from(idref));
+            }
+        }
+
+        Ok(res)
     }
 }
 
 #[derive(Debug, Default)]
 pub struct EpubMetadata {
     pub title: Option<String>,
-    pub author: Option<String>,
+    pub authors: Option<Vec<String>>,
     pub language: Option<String>,
 }
 
-impl EpubMetadata {
-    pub fn from(xml_metadata: &roxmltree::Node<'_, '_>) -> Self {
+impl From<&roxmltree::Node<'_, '_>> for EpubMetadata {
+    fn from(xml_metadata: &roxmltree::Node<'_, '_>) -> Self {
         let mut res = Self::default();
+        let mut authors = vec![];
 
         for child in xml_metadata.children() {
             match child.tag_name().name() {
@@ -106,7 +143,7 @@ impl EpubMetadata {
                 },
                 "creator" => {
                     if let Some(author) = child.text() {
-                        res.author = Some(String::from(author));
+                        authors.push(String::from(author));
                     }
                 },
                 "language" => {
@@ -116,6 +153,10 @@ impl EpubMetadata {
                 },
                 _ => (),
             }
+        }
+
+        if !authors.is_empty() {
+            res.authors = Some(authors);
         }
 
         res
