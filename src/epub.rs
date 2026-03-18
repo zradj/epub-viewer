@@ -17,14 +17,11 @@ impl EpubBook {
         let archive = File::open(path)?;
         let mut archive = ZipArchive::new(archive)?;
 
-        let mime_result = archive
+        let _ = archive
             .by_name("mimetype")
             .map_err(EpubError::from)
-            .and_then(|mut f| Self::verify_mimetype(&mut f));
-        
-        if let Err(e) = mime_result {
-            eprintln!("[Warning] MIME verification: {e}");
-        }
+            .and_then(|mut f| Self::verify_mimetype(&mut f))
+            .inspect_err(|e| eprintln!("[Warning] MIME verification: {e}"));
 
         let root_path = {
             let mut container_file = archive.by_name("META-INF/container.xml")?;
