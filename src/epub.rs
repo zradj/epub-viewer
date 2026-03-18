@@ -78,7 +78,7 @@ impl EpubBook {
             .ok_or(EpubError::ResourceNotFound(String::from(id)))?;
         let mut resource = rc_resource.borrow_mut();
 
-        if resource.content.as_ref() == None {
+        if resource.content.is_none() {
             let mut archive = self.archive.borrow_mut();
             let mut resource_file = archive.by_name(&resource.path)?;
 
@@ -178,21 +178,13 @@ impl From<&roxmltree::Node<'_, '_>> for EpubMetadata {
 
         for child in xml_metadata.children() {
             match child.tag_name().name() {
-                "title" => {
-                    if let Some(title) = child.text() {
-                        res.title = Some(String::from(title));
-                    }
-                },
+                "title" => res.title = child.text().map(String::from),
                 "creator" => {
                     if let Some(author) = child.text() {
                         authors.push(String::from(author));
                     }
                 },
-                "language" => {
-                    if let Some(lang) = child.text() {
-                        res.language = Some(String::from(lang));
-                    }
-                },
+                "language" => res.language = child.text().map(String::from),
                 _ => (),
             }
         }
