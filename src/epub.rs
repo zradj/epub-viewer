@@ -8,7 +8,7 @@ use crate::error::{EpubError, EpubResult};
 pub struct EpubBook {
     pub metadata: EpubMetadata,
     pub spine: Vec<String>,
-    resources: RefCell<HashMap<String, EpubResource>>,
+    resources: RefCell<HashMap<String, Rc<RefCell<EpubResource>>>>,
     archive: RefCell<ZipArchive<File>>,
 }
 
@@ -23,7 +23,7 @@ impl EpubBook {
             .and_then(|mut f| Self::verify_mimetype(&mut f));
         
         if let Err(e) = mime_result {
-            eprintln!("[Warning] {e}");
+            eprintln!("[Warning] MIME verification: {e}");
         }
 
         let root_path = {
@@ -71,29 +71,24 @@ impl EpubBook {
         })
     }
 
-    pub fn get_resource(&self, id: &str) -> EpubResult<Rc<Vec<u8>>> {
-        let mut resources = self.resources.borrow_mut();
-        let resource = resources
-            .get_mut(id)
+    pub fn get_resource(&self, id: &str) -> EpubResult<Rc<RefCell<EpubResource>>> {
+        let resources = self.resources.borrow_mut();
+        let rc_resource = resources
+            .get(id)
             .ok_or(EpubError::ResourceNotFound(String::from(id)))?;
+        let mut resource = rc_resource.borrow_mut();
 
-        let content = match resource.content.as_ref() {
-            Some(content) => content.clone(),
-            None => {
-                let mut archive = self.archive.borrow_mut();
-                let mut resource_file = archive.by_name(&resource.path)?;
+        if resource.content.as_ref() == None {
+            let mut archive = self.archive.borrow_mut();
+            let mut resource_file = archive.by_name(&resource.path)?;
 
-                let mut buf = vec![];
-                resource_file.read_to_end(&mut buf)?;
+            let mut buf = vec![];
+            resource_file.read_to_end(&mut buf)?;
 
-                let rc = Rc::new(buf);
-                resource.content = Some(rc.clone());
+            resource.content = Some(buf);
+        }
 
-                rc
-            },
-        };
-
-        Ok(content)
+        Ok(Rc::clone(rc_resource))
     }
 
     fn verify_mimetype(mime_file: &mut ZipFile<'_, File>) -> EpubResult<()> {
@@ -123,7 +118,7 @@ impl EpubBook {
     fn read_manifest(
         xml_manifest: &roxmltree::Node<'_, '_>,
         base_path: &str,
-    ) -> EpubResult<HashMap<String, EpubResource>> {
+    ) -> EpubResult<HashMap<String, Rc<RefCell<EpubResource>>>> {
         let mut res = HashMap::new();
 
         for child in xml_manifest.children() {
@@ -143,7 +138,9 @@ impl EpubBook {
                 let id = String::from(id);
                 let media_type = String::from(media_type);
 
-                res.insert(id, EpubResource { path, media_type, content: None });
+                res.insert(
+                    id, Rc::new(RefCell::new(EpubResource { path, media_type, content: None }))
+                );
             }
         }
 
@@ -212,5 +209,5 @@ impl From<&roxmltree::Node<'_, '_>> for EpubMetadata {
 pub struct EpubResource {
     pub path: String,
     pub media_type: String,
-    pub content: Option<Rc<Vec<u8>>>,
+    pub content: Option<Vec<u8>>,
 }

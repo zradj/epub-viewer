@@ -4,7 +4,7 @@ use thiserror::Error;
 pub enum EpubError {
     #[error("Failed to open file: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Failed to read ZIP archive: {0}")]
+    #[error("ZIP archive error: {0}")]
     Zip(#[from] zip::result::ZipError),
     #[error("XML Parsing Error: {0}")]
     Xml(#[from] roxmltree::Error),
