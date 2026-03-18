@@ -62,6 +62,31 @@ impl EpubBook {
         })
     }
 
+    pub fn get_resource(&self, id: &str) -> EpubResult<Rc<Vec<u8>>> {
+        let mut resources = self.resources.borrow_mut();
+        let resource = resources
+            .get_mut(id)
+            .ok_or(EpubError::ResourceNotFound(String::from(id)))?;
+
+        let content = match resource.content.as_ref() {
+            Some(content) => content.clone(),
+            None => {
+                let mut archive = self.archive.borrow_mut();
+                let mut resource_file = archive.by_name(&resource.path)?;
+
+                let mut buf = vec![];
+                resource_file.read_to_end(&mut buf)?;
+
+                let rc = Rc::new(buf);
+                resource.content = Some(rc.clone());
+
+                rc
+            },
+        };
+
+        Ok(content)
+    }
+
     fn extract_root_path(container: &roxmltree::Document) -> EpubResult<String> {
         for desc in container.descendants() {
             if desc.tag_name().name() == "rootfile" {
