@@ -9,7 +9,10 @@ pub enum EpubError {
     #[error("XML Parsing Error: {0}")]
     Xml(#[from] roxmltree::Error),
     #[error("Missing attribute '{attr}': {loc}")]
-    MissingAttribute { attr: &'static str, loc: &'static str },
+    MissingAttribute {
+        attr: &'static str,
+        loc: &'static str,
+    },
     #[error("Resource not found: {0}")]
     ResourceNotFound(String),
     #[error("Could not find the OPF rootfile")]

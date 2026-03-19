@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::File, io::Read};
+use std::{collections::HashMap, convert::Infallible, fmt, fs::File, io::Read, str::FromStr};
 
 use zip::{ZipArchive, read::ZipFile};
 
@@ -67,7 +67,9 @@ impl EpubBook {
     }
 
     pub fn resource(&self, id: &str) -> EpubResult<&EpubResource> {
-        self.resources.get(id).ok_or(EpubError::ResourceNotFound(String::from(id)))
+        self.resources
+            .get(id)
+            .ok_or(EpubError::ResourceNotFound(String::from(id)))
     }
 
     fn verify_mimetype(mime_file: &mut ZipFile<'_, File>) -> EpubResult<()> {
@@ -104,8 +106,12 @@ impl EpubBook {
         for child in xml_manifest.children() {
             if child.tag_name().name() == "item" {
                 // TODO: implement error tolerance
-                let get_attr = |attr| child.attribute(attr)
-                    .ok_or(EpubError::MissingAttribute { attr, loc: "manifest item" });
+                let get_attr = |attr| {
+                    child.attribute(attr).ok_or(EpubError::MissingAttribute {
+                        attr,
+                        loc: "manifest item",
+                    })
+                };
 
                 let path = format!("{}{}", base_path, get_attr("href")?);
                 let id = String::from(get_attr("id")?);
@@ -116,7 +122,11 @@ impl EpubBook {
                 item_file.read_to_end(&mut buf)?;
 
                 res.insert(
-                    id, EpubResource { media_type, content: buf }
+                    id,
+                    EpubResource {
+                        media_type: media_type.parse().unwrap(),
+                        content: buf,
+                    },
                 );
             }
         }
@@ -129,9 +139,12 @@ impl EpubBook {
 
         for child in xml_spine.children() {
             if child.tag_name().name() == "itemref" {
-                let idref = child.attribute("idref").ok_or(
-                    EpubError::MissingAttribute { attr: "idref", loc: "spine item" }
-                )?;
+                let idref = child
+                    .attribute("idref")
+                    .ok_or(EpubError::MissingAttribute {
+                        attr: "idref",
+                        loc: "spine item",
+                    })?;
 
                 res.push(String::from(idref));
             }
@@ -159,7 +172,7 @@ impl From<&roxmltree::Node<'_, '_>> for EpubMetadata {
                     if let Some(author) = child.text() {
                         res.authors.push(String::from(author));
                     }
-                },
+                }
                 "language" => res.language = child.text().map(String::from),
                 _ => (),
             }
@@ -171,6 +184,85 @@ impl From<&roxmltree::Node<'_, '_>> for EpubMetadata {
 
 #[derive(Debug)]
 pub struct EpubResource {
-    pub media_type: String,
+    pub media_type: MediaType,
     pub content: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub enum MediaType {
+    Xhtml,
+    Css,
+    Js,
+    ImageGif,
+    ImageJpeg,
+    ImagePng,
+    ImageSvg,
+    ImageWebp,
+    AudioMpeg,
+    AudioMp4,
+    AudioOgg,
+    FontTtf,
+    FontOtf,
+    FontSfnt,
+    FontWoff,
+    FontWoff2,
+    LegacyNcx,
+    MediaOverlay,
+    Other(String),
+}
+
+impl FromStr for MediaType {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "application/xhtml+xml" => Self::Xhtml,
+            "text/css" => Self::Css,
+            "application/javascript" | "application/ecmascript" | "text/javascript" => Self::Js,
+            "image/gif" => Self::ImageGif,
+            "image/jpeg" => Self::ImageJpeg,
+            "image/png" => Self::ImagePng,
+            "image/svg+xml" => Self::ImageSvg,
+            "image/webp" => Self::ImageWebp,
+            "audio/mpeg" => Self::AudioMpeg,
+            "audio/mp4" => Self::AudioMp4,
+            "audio/ogg" | "audio/ogg; codecs=opus" => Self::AudioOgg,
+            "font/ttf" => Self::FontTtf,
+            "font/otf" | "application/vnd.ms-opentype" => Self::FontOtf,
+            "application/font-sfnt" => Self::FontSfnt,
+            "font/woff" | "application/font-woff" => Self::FontWoff,
+            "font/woff2" => Self::FontWoff2,
+            "application/x-dtbncx+xml" => Self::LegacyNcx,
+            "application/smil+xml" => Self::MediaOverlay,
+            _ => Self::Other(String::from(s)),
+        })
+    }
+}
+
+impl fmt::Display for MediaType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Xhtml => "application/xhtml+xml",
+            Self::Css => "text/css",
+            Self::Js => "text/javascript",
+            Self::ImageGif => "image/gif",
+            Self::ImageJpeg => "image/jpeg",
+            Self::ImagePng => "image/png",
+            Self::ImageSvg => "image/svg+xml",
+            Self::ImageWebp => "image/webp",
+            Self::AudioMpeg => "audio/mpeg",
+            Self::AudioMp4 => "audio/mp4",
+            Self::AudioOgg => "audio/ogg; codecs=opus",
+            Self::FontTtf => "font/ttf",
+            Self::FontOtf => "font/otf",
+            Self::FontSfnt => "application/font-sfnt",
+            Self::FontWoff => "font/woff",
+            Self::FontWoff2 => "font/woff2",
+            Self::LegacyNcx => "application/x-dtbncx+xml",
+            Self::MediaOverlay => "application/smil+xml",
+            Self::Other(s) => s,
+        };
+
+        f.write_str(s)
+    }
 }
