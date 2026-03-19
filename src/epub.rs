@@ -66,7 +66,7 @@ impl EpubBook {
         })
     }
 
-    pub fn get_resource(&self, id: &str) -> EpubResult<&EpubResource> {
+    pub fn resource(&self, id: &str) -> EpubResult<&EpubResource> {
         self.resources.get(id).ok_or(EpubError::ResourceNotFound(String::from(id)))
     }
 
@@ -144,30 +144,25 @@ impl EpubBook {
 #[derive(Debug, Default)]
 pub struct EpubMetadata {
     pub title: Option<String>,
-    pub authors: Option<Vec<String>>,
+    pub authors: Vec<String>,
     pub language: Option<String>,
 }
 
 impl From<&roxmltree::Node<'_, '_>> for EpubMetadata {
     fn from(xml_metadata: &roxmltree::Node<'_, '_>) -> Self {
         let mut res = Self::default();
-        let mut authors = vec![];
 
         for child in xml_metadata.children() {
             match child.tag_name().name() {
                 "title" => res.title = child.text().map(String::from),
                 "creator" => {
                     if let Some(author) = child.text() {
-                        authors.push(String::from(author));
+                        res.authors.push(String::from(author));
                     }
                 },
                 "language" => res.language = child.text().map(String::from),
                 _ => (),
             }
-        }
-
-        if !authors.is_empty() {
-            res.authors = Some(authors);
         }
 
         res
