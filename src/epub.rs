@@ -9,7 +9,6 @@ pub struct EpubBook {
     pub metadata: EpubMetadata,
     pub spine: Vec<String>,
     resources: HashMap<String, EpubResource>,
-    archive: ZipArchive<File>,
 }
 
 impl EpubBook {
@@ -53,7 +52,7 @@ impl EpubBook {
         for child in root_doc.root_element().children() {
             match child.tag_name().name() {
                 "metadata" => metadata = EpubMetadata::from(&child),
-                "manifest" => resources = Self::read_manifest(&child, base_path)?,
+                "manifest" => resources = Self::read_manifest(&mut archive, &child, base_path)?,
                 // TODO: check "toc" atrribute
                 "spine" => spine = Self::read_spine(&child)?,
                 _ => (),
@@ -64,25 +63,11 @@ impl EpubBook {
             metadata,
             spine,
             resources,
-            archive,
         })
     }
 
-    pub fn get_resource(&mut self, id: &str) -> EpubResult<&EpubResource> {
-        let resource = self.resources
-            .get_mut(id)
-            .ok_or(EpubError::ResourceNotFound(String::from(id)))?;
-
-        if resource.content.is_none() {
-            let mut resource_file = self.archive.by_name(&resource.path)?;
-
-            let mut buf = vec![];
-            resource_file.read_to_end(&mut buf)?;
-
-            resource.content = Some(buf);
-        }
-
-        Ok(resource)
+    pub fn get_resource(&self, id: &str) -> EpubResult<&EpubResource> {
+        self.resources.get(id).ok_or(EpubError::ResourceNotFound(String::from(id)))
     }
 
     fn verify_mimetype(mime_file: &mut ZipFile<'_, File>) -> EpubResult<()> {
@@ -110,6 +95,7 @@ impl EpubBook {
     }
 
     fn read_manifest(
+        archive: &mut ZipArchive<File>,
         xml_manifest: &roxmltree::Node<'_, '_>,
         base_path: &str,
     ) -> EpubResult<HashMap<String, EpubResource>> {
@@ -125,8 +111,12 @@ impl EpubBook {
                 let id = String::from(get_attr("id")?);
                 let media_type = String::from(get_attr("media-type")?);
 
+                let mut item_file = archive.by_name(&path)?;
+                let mut buf = vec![];
+                item_file.read_to_end(&mut buf)?;
+
                 res.insert(
-                    id, EpubResource { path, media_type, content: None }
+                    id, EpubResource { media_type, content: buf }
                 );
             }
         }
@@ -186,7 +176,6 @@ impl From<&roxmltree::Node<'_, '_>> for EpubMetadata {
 
 #[derive(Debug)]
 pub struct EpubResource {
-    pub path: String,
     pub media_type: String,
-    pub content: Option<Vec<u8>>,
+    pub content: Vec<u8>,
 }
