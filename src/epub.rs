@@ -113,7 +113,7 @@ impl EpubBook {
                     })
                 };
 
-                let path = format!("{}{}", base_path, get_attr("href")?);
+                let path = normalize_zip_path(base_path, get_attr("href")?);
                 let id = String::from(get_attr("id")?);
                 let media_type = String::from(get_attr("media-type")?);
 
@@ -307,4 +307,33 @@ pub struct SpineItem {
     pub idref: String,
     pub linear: bool,
     pub properties: Option<String>,
+}
+
+fn normalize_zip_path(base: &str, href: &str) -> String {
+    let base_path = std::path::Path::new(base);
+    let href_path = std::path::Path::new(href);
+    let joined = base_path.join(href_path);
+
+    let mut components: Vec<&std::ffi::OsStr> = vec![];
+    for comp in joined.components() {
+        match comp {
+            std::path::Component::ParentDir => {
+                components.pop();
+            }
+            std::path::Component::Normal(s) if s != ".." && s != "." => components.push(s),
+            _ => (),
+        }
+    }
+
+    let normalized = components
+        .iter()
+        .map(|s| s.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/");
+
+    if normalized.is_empty() {
+        String::from(".")
+    } else {
+        normalized
+    }
 }
