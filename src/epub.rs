@@ -7,7 +7,7 @@ use crate::error::{EpubError, EpubResult};
 #[derive(Debug)]
 pub struct EpubBook {
     pub metadata: EpubMetadata,
-    pub spine: Vec<String>,
+    pub spine: Vec<SpineItem>,
     resources: HashMap<String, EpubResource>,
 }
 
@@ -20,7 +20,7 @@ impl EpubBook {
             .by_name("mimetype")
             .map_err(EpubError::from)
             .and_then(|mut f| Self::verify_mimetype(&mut f))
-            .inspect_err(|e| eprintln!("[Warning] MIME verification: {e}"));
+            .inspect_err(|e| eprintln!("[Warning] MIME verification error: {e}"));
 
         let root_path = {
             let mut container_file = archive.by_name("META-INF/container.xml")?;
@@ -134,7 +134,7 @@ impl EpubBook {
         Ok(res)
     }
 
-    fn read_spine(xml_spine: &roxmltree::Node<'_, '_>) -> EpubResult<Vec<String>> {
+    fn read_spine(xml_spine: &roxmltree::Node<'_, '_>) -> EpubResult<Vec<SpineItem>> {
         let mut res = vec![];
 
         for child in xml_spine.children() {
@@ -144,9 +144,21 @@ impl EpubBook {
                     .ok_or(EpubError::MissingAttribute {
                         attr: "idref",
                         loc: "spine item",
-                    })?;
+                    })?
+                    .to_string();
 
-                res.push(String::from(idref));
+                let linear = match child.attribute("linear") {
+                    Some("no") => false,
+                    _ => true,
+                };
+
+                let properties = child.attribute("properties").map(String::from);
+
+                res.push(SpineItem {
+                    idref,
+                    linear,
+                    properties,
+                });
             }
         }
 
@@ -186,6 +198,29 @@ impl From<&roxmltree::Node<'_, '_>> for EpubMetadata {
 pub struct EpubResource {
     pub media_type: MediaType,
     pub content: Vec<u8>,
+}
+
+impl EpubResource {
+    pub fn is_text(&self) -> bool {
+        match &self.media_type {
+            MediaType::Xhtml
+            | MediaType::Css
+            | MediaType::Js
+            | MediaType::ImageSvg
+            | MediaType::LegacyNcx
+            | MediaType::MediaOverlay => true,
+            MediaType::Other(s) => s.starts_with("text/"),
+            _ => false,
+        }
+    }
+
+    pub fn content_str(&self) -> EpubResult<String> {
+        if self.is_text() {
+            Ok(String::from_utf8_lossy(&self.content).into_owned())
+        } else {
+            Err(EpubError::NotTextContent)
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -265,4 +300,11 @@ impl fmt::Display for MediaType {
 
         f.write_str(s)
     }
+}
+
+#[derive(Debug)]
+pub struct SpineItem {
+    pub idref: String,
+    pub linear: bool,
+    pub properties: Option<String>,
 }

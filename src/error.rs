@@ -19,6 +19,8 @@ pub enum EpubError {
     RootfileNotFound,
     #[error("Incorrect MIME type")]
     IncorrectMimeType,
+    #[error("Content cannot be converted to text")]
+    NotTextContent,
 }
 
 pub type EpubResult<T> = Result<T, EpubError>;
