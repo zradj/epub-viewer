@@ -1,4 +1,6 @@
-use std::{collections::HashMap, convert::Infallible, fmt, fs::File, io::Read, str::FromStr};
+use std::{
+    collections::HashMap, convert::Infallible, fmt, fs::File, io::Read, path::Path, str::FromStr,
+};
 
 use zip::{ZipArchive, read::ZipFile};
 
@@ -12,7 +14,7 @@ pub struct EpubBook {
 }
 
 impl EpubBook {
-    pub fn new(path: &str) -> EpubResult<Self> {
+    pub fn new<P: AsRef<Path>>(path: P) -> EpubResult<Self> {
         let archive = File::open(path)?;
         let mut archive = ZipArchive::new(archive)?;
 
@@ -46,7 +48,7 @@ impl EpubBook {
 
         let root_doc = roxmltree::Document::parse(&root_content)?;
         let root_element = root_doc.root_element();
-        
+
         let mut metadata = EpubMetadata::default();
         if let Some(meta_node) = root_element.children().find(|c| c.has_tag_name("metadata")) {
             metadata = EpubMetadata::from(&meta_node);
@@ -55,14 +57,20 @@ impl EpubBook {
         let manifest_node = root_element
             .children()
             .find(|c| c.has_tag_name("manifest"))
-            .ok_or(EpubError::MissingAttribute { attr: "manifest", loc: "package document" })?;
+            .ok_or(EpubError::MissingAttribute {
+                attr: "manifest",
+                loc: "package document",
+            })?;
 
         let (resources, id_to_path) = Self::read_manifest(&mut archive, &manifest_node, base_path)?;
 
         let spine_node = root_element
             .children()
             .find(|c| c.has_tag_name("spine"))
-            .ok_or(EpubError::MissingAttribute { attr: "spine", loc: "package document" })?;
+            .ok_or(EpubError::MissingAttribute {
+                attr: "spine",
+                loc: "package document",
+            })?;
 
         let spine = Self::read_spine(&spine_node, &id_to_path)?;
 
@@ -79,7 +87,11 @@ impl EpubBook {
             .ok_or(EpubError::ResourceNotFound(String::from(path)))
     }
 
-    pub fn relative_resource(&self, current_doc_path: &str, href: &str) -> EpubResult<&EpubResource> {
+    pub fn relative_resource(
+        &self,
+        current_doc_path: &str,
+        href: &str,
+    ) -> EpubResult<&EpubResource> {
         if !href.starts_with(".") {
             return self.resource(href);
         }
@@ -173,7 +185,7 @@ impl EpubBook {
                         attr: "idref",
                         loc: "spine item",
                     })?;
-                
+
                 let path = id_to_path
                     .get(idref)
                     .ok_or(EpubError::ResourceNotFound(String::from(idref)))?
@@ -243,7 +255,15 @@ impl EpubResource {
         }
     }
 
-    pub fn content_str(&self) -> EpubResult<String> {
+    pub fn content_str(&self) -> EpubResult<&str> {
+        if self.is_text() {
+            Ok(std::str::from_utf8(&self.content)?)
+        } else {
+            Err(EpubError::NotTextContent)
+        }
+    }
+
+    pub fn content_str_lossy(&self) -> EpubResult<String> {
         if self.is_text() {
             Ok(String::from_utf8_lossy(&self.content).into_owned())
         } else {

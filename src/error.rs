@@ -8,6 +8,8 @@ pub enum EpubError {
     Zip(#[from] zip::result::ZipError),
     #[error("XML Parsing Error: {0}")]
     Xml(#[from] roxmltree::Error),
+    #[error("UTF-8 conversion error: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
     #[error("Incorrect MIME type")]
     IncorrectMimeType,
     #[error("Could not find the OPF package file")]
