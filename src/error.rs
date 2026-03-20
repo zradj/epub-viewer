@@ -8,19 +8,19 @@ pub enum EpubError {
     Zip(#[from] zip::result::ZipError),
     #[error("XML Parsing Error: {0}")]
     Xml(#[from] roxmltree::Error),
+    #[error("Incorrect MIME type")]
+    IncorrectMimeType,
+    #[error("Could not find the OPF package file")]
+    PackageNotFound,
+    #[error("Content cannot be converted to text")]
+    NotTextContent,
+    #[error("Resource not found: {0}")]
+    ResourceNotFound(String),
     #[error("Missing attribute '{attr}': {loc}")]
     MissingAttribute {
         attr: &'static str,
         loc: &'static str,
     },
-    #[error("Resource not found: {0}")]
-    ResourceNotFound(String),
-    #[error("Could not find the OPF rootfile")]
-    RootfileNotFound,
-    #[error("Incorrect MIME type")]
-    IncorrectMimeType,
-    #[error("Content cannot be converted to text")]
-    NotTextContent,
 }
 
 pub type EpubResult<T> = Result<T, EpubError>;

@@ -22,42 +22,49 @@ impl EpubBook {
             .and_then(|mut f| Self::verify_mimetype(&mut f))
             .inspect_err(|e| eprintln!("[Warning] MIME verification error: {e}"));
 
-        let root_path = {
+        let package_path = {
             let mut container_file = archive.by_name("META-INF/container.xml")?;
             let mut container_content = String::new();
             container_file.read_to_string(&mut container_content)?;
 
             let container_doc = roxmltree::Document::parse(&container_content)?;
-            Self::extract_root_path(&container_doc)?
+            Self::extract_package_path(&container_doc)?
         };
 
-        let base_path = match root_path.rfind('/') {
-            Some(i) => &root_path[..=i],
+        let base_path = match package_path.rfind('/') {
+            Some(i) => &package_path[..=i],
             None => "",
         };
 
         let root_content = {
-            let mut root_file = archive.by_name(&root_path)?;
+            let mut root_file = archive.by_name(&package_path)?;
             let mut root_content = String::new();
             root_file.read_to_string(&mut root_content)?;
 
             root_content
         };
 
-        let mut metadata = EpubMetadata::default();
-        let mut resources = HashMap::new();
-        let mut spine = vec![];
-
         let root_doc = roxmltree::Document::parse(&root_content)?;
-        for child in root_doc.root_element().children() {
-            match child.tag_name().name() {
-                "metadata" => metadata = EpubMetadata::from(&child),
-                "manifest" => resources = Self::read_manifest(&mut archive, &child, base_path)?,
-                // TODO: check "toc" atrribute
-                "spine" => spine = Self::read_spine(&child)?,
-                _ => (),
-            }
+        let root_element = root_doc.root_element();
+        
+        let mut metadata = EpubMetadata::default();
+        if let Some(meta_node) = root_element.children().find(|c| c.has_tag_name("metadata")) {
+            metadata = EpubMetadata::from(&meta_node);
         }
+
+        let manifest_node = root_element
+            .children()
+            .find(|c| c.has_tag_name("manifest"))
+            .ok_or(EpubError::MissingAttribute { attr: "manifest", loc: "package document" })?;
+
+        let (resources, id_to_path) = Self::read_manifest(&mut archive, &manifest_node, base_path)?;
+
+        let spine_node = root_element
+            .children()
+            .find(|c| c.has_tag_name("spine"))
+            .ok_or(EpubError::MissingAttribute { attr: "spine", loc: "package document" })?;
+
+        let spine = Self::read_spine(&spine_node, &id_to_path)?;
 
         Ok(EpubBook {
             metadata,
@@ -66,10 +73,25 @@ impl EpubBook {
         })
     }
 
-    pub fn resource(&self, id: &str) -> EpubResult<&EpubResource> {
+    pub fn resource(&self, path: &str) -> EpubResult<&EpubResource> {
         self.resources
-            .get(id)
-            .ok_or(EpubError::ResourceNotFound(String::from(id)))
+            .get(path)
+            .ok_or(EpubError::ResourceNotFound(String::from(path)))
+    }
+
+    pub fn relative_resource(&self, current_doc_path: &str, href: &str) -> EpubResult<&EpubResource> {
+        if !href.starts_with(".") {
+            return self.resource(href);
+        }
+
+        let base_dir = match current_doc_path.rfind('/') {
+            Some(i) => &current_doc_path[..=i],
+            None => "",
+        };
+
+        let path = normalize_zip_path(base_dir, href);
+
+        self.resource(&path)
     }
 
     fn verify_mimetype(mime_file: &mut ZipFile<'_, File>) -> EpubResult<()> {
@@ -83,7 +105,7 @@ impl EpubBook {
         Ok(())
     }
 
-    fn extract_root_path(container: &roxmltree::Document) -> EpubResult<String> {
+    fn extract_package_path(container: &roxmltree::Document) -> EpubResult<String> {
         for desc in container.descendants() {
             if desc.tag_name().name() == "rootfile" {
                 let attr = desc.attribute("full-path");
@@ -93,15 +115,16 @@ impl EpubBook {
             }
         }
 
-        Err(EpubError::RootfileNotFound)
+        Err(EpubError::PackageNotFound)
     }
 
     fn read_manifest(
         archive: &mut ZipArchive<File>,
         xml_manifest: &roxmltree::Node<'_, '_>,
         base_path: &str,
-    ) -> EpubResult<HashMap<String, EpubResource>> {
-        let mut res = HashMap::new();
+    ) -> EpubResult<(HashMap<String, EpubResource>, HashMap<String, String>)> {
+        let mut resources = HashMap::new();
+        let mut id_to_path = HashMap::new();
 
         for child in xml_manifest.children() {
             if child.tag_name().name() == "item" {
@@ -121,8 +144,10 @@ impl EpubBook {
                 let mut buf = vec![];
                 item_file.read_to_end(&mut buf)?;
 
-                res.insert(
-                    id,
+                id_to_path.insert(id, path.clone());
+
+                resources.insert(
+                    path,
                     EpubResource {
                         media_type: media_type.parse().unwrap(),
                         content: buf,
@@ -131,10 +156,13 @@ impl EpubBook {
             }
         }
 
-        Ok(res)
+        Ok((resources, id_to_path))
     }
 
-    fn read_spine(xml_spine: &roxmltree::Node<'_, '_>) -> EpubResult<Vec<SpineItem>> {
+    fn read_spine(
+        xml_spine: &roxmltree::Node<'_, '_>,
+        id_to_path: &HashMap<String, String>,
+    ) -> EpubResult<Vec<SpineItem>> {
         let mut res = vec![];
 
         for child in xml_spine.children() {
@@ -144,18 +172,19 @@ impl EpubBook {
                     .ok_or(EpubError::MissingAttribute {
                         attr: "idref",
                         loc: "spine item",
-                    })?
-                    .to_string();
+                    })?;
+                
+                let path = id_to_path
+                    .get(idref)
+                    .ok_or(EpubError::ResourceNotFound(String::from(idref)))?
+                    .clone();
 
-                let linear = match child.attribute("linear") {
-                    Some("no") => false,
-                    _ => true,
-                };
+                let linear = !matches!(child.attribute("linear"), Some("no"));
 
                 let properties = child.attribute("properties").map(String::from);
 
                 res.push(SpineItem {
-                    idref,
+                    path,
                     linear,
                     properties,
                 });
@@ -279,7 +308,7 @@ impl fmt::Display for MediaType {
         let s = match self {
             Self::Xhtml => "application/xhtml+xml",
             Self::Css => "text/css",
-            Self::Js => "text/javascript",
+            Self::Js => "application/javascript",
             Self::ImageGif => "image/gif",
             Self::ImageJpeg => "image/jpeg",
             Self::ImagePng => "image/png",
@@ -304,7 +333,7 @@ impl fmt::Display for MediaType {
 
 #[derive(Debug)]
 pub struct SpineItem {
-    pub idref: String,
+    pub path: String,
     pub linear: bool,
     pub properties: Option<String>,
 }

@@ -1,5 +1,5 @@
 [package]
-name = "epub-viewer"
+name = "epub-parser"
 version = "0.1.0"
 edition = "2024"
 
