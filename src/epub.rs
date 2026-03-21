@@ -4,7 +4,10 @@ use std::{
 
 use zip::{ZipArchive, read::ZipFile};
 
-use crate::error::{EpubError, EpubResult};
+use crate::{
+    error::{EpubError, EpubResult},
+    metadata::EpubLenientMetadata,
+};
 
 #[derive(Debug)]
 pub struct EpubBook {
@@ -204,34 +207,6 @@ impl EpubBook {
         }
 
         Ok(res)
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct EpubMetadata {
-    pub title: Option<String>,
-    pub authors: Vec<String>,
-    pub language: Option<String>,
-}
-
-impl From<&roxmltree::Node<'_, '_>> for EpubMetadata {
-    fn from(xml_metadata: &roxmltree::Node<'_, '_>) -> Self {
-        let mut res = Self::default();
-
-        for child in xml_metadata.children() {
-            match child.tag_name().name() {
-                "title" => res.title = child.text().map(String::from),
-                "creator" => {
-                    if let Some(author) = child.text() {
-                        res.authors.push(String::from(author));
-                    }
-                }
-                "language" => res.language = child.text().map(String::from),
-                _ => (),
-            }
-        }
-
-        res
     }
 }
 

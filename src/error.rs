@@ -16,6 +16,8 @@ pub enum EpubError {
     PackageNotFound,
     #[error("Content cannot be converted to text")]
     NotTextContent,
+    #[error("Book metadata error: {0}")]
+    Metadata(MetadataError),
     #[error("Resource not found: {0}")]
     ResourceNotFound(String),
     #[error("Missing attribute '{attr}': {loc}")]
@@ -23,6 +25,22 @@ pub enum EpubError {
         attr: &'static str,
         loc: &'static str,
     },
+}
+
+#[derive(Error, Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub enum MetadataError {
+    #[error("The book has no identifier")]
+    NoIdentifier,
+    #[error("The book has no title")]
+    NoTitle,
+    #[error("The book does not specify the language of the content")]
+    NoLanguage,
+    #[error("The book does not specify the last modified date")]
+    NoLastModified,
+    #[error("The book provides multiple publication dates")]
+    MultipleDates,
+    #[error("The book provides multiple last modified dates")]
+    MultipleLastModified,
 }
 
 pub type EpubResult<T> = Result<T, EpubError>;

@@ -1,3 +1,3 @@
 pub mod epub;
 pub mod error;
-pub mod reader;
+pub mod metadata;
