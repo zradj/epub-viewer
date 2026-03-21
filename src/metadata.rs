@@ -96,7 +96,7 @@ pub struct EpubStrictMetadata {
 impl TryFrom<EpubLenientMetadata> for EpubStrictMetadata {
     type Error = Vec<MetadataError>;
 
-    fn try_from(lenient: EpubLenientMetadata) -> Result<Self, Self::Error> {
+    fn try_from(mut lenient: EpubLenientMetadata) -> Result<Self, Self::Error> {
         if !lenient.parse_warnings.is_empty() {
             Err(lenient.parse_warnings)
         } else {
@@ -109,7 +109,7 @@ impl TryFrom<EpubLenientMetadata> for EpubStrictMetadata {
                 contributors: lenient.contributors,
                 languages: lenient.languages,
                 publishers: lenient.publishers,
-                date: lenient.dates.first().cloned(),
+                date: lenient.dates.pop(),
                 last_modified: lenient.last_modified.unwrap(),
             })
         }
