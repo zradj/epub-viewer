@@ -92,7 +92,7 @@ impl EpubBook {
         current_doc_path: &str,
         href: &str,
     ) -> EpubResult<&EpubResource> {
-        if !href.starts_with(".") {
+        if href.starts_with('/') || href.contains("://") {
             return self.resource(href);
         }
 
