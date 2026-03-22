@@ -1,7 +1,7 @@
-use epub_parser::{epub::EpubBook, error::EpubResult};
+use epub_parser::{epub::Book, error::EpubResult};
 
 fn main() -> EpubResult<()> {
-    let book = EpubBook::new("book.epub")?;
+    let book = Book::new("book.epub")?;
     dbg!(&book.metadata);
     dbg!(&book.spine);
     let res = book.resource(&book.spine[0].path)?;

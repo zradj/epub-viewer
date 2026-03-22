@@ -1,7 +1,7 @@
 use crate::error::MetadataError;
 
 #[derive(Debug, Default)]
-pub struct EpubLenientMetadata {
+pub struct LenientMetadata {
     pub identifiers: Vec<String>,
     pub titles: Vec<String>,
     pub subjects: Vec<String>,
@@ -16,7 +16,7 @@ pub struct EpubLenientMetadata {
     pub parse_warnings: Vec<MetadataError>,
 }
 
-impl From<&roxmltree::Node<'_, '_>> for EpubLenientMetadata {
+impl From<&roxmltree::Node<'_, '_>> for LenientMetadata {
     fn from(xml_metadata: &roxmltree::Node) -> Self {
         let mut res = Self::default();
 
@@ -85,7 +85,7 @@ impl From<&roxmltree::Node<'_, '_>> for EpubLenientMetadata {
     }
 }
 
-pub struct EpubStrictMetadata {
+pub struct StrictMetadata {
     pub identifiers: Vec<String>,
     pub titles: Vec<String>,
     pub subjects: Vec<String>,
@@ -99,14 +99,14 @@ pub struct EpubStrictMetadata {
     pub last_modified: String,
 }
 
-impl TryFrom<EpubLenientMetadata> for EpubStrictMetadata {
+impl TryFrom<LenientMetadata> for StrictMetadata {
     type Error = Vec<MetadataError>;
 
-    fn try_from(mut lenient: EpubLenientMetadata) -> Result<Self, Self::Error> {
+    fn try_from(mut lenient: LenientMetadata) -> Result<Self, Self::Error> {
         if !lenient.parse_warnings.is_empty() {
             Err(lenient.parse_warnings)
         } else {
-            Ok(EpubStrictMetadata {
+            Ok(StrictMetadata {
                 identifiers: lenient.identifiers,
                 titles: lenient.titles,
                 subjects: lenient.subjects,
@@ -123,11 +123,11 @@ impl TryFrom<EpubLenientMetadata> for EpubStrictMetadata {
     }
 }
 
-impl TryFrom<&roxmltree::Node<'_, '_>> for EpubStrictMetadata {
+impl TryFrom<&roxmltree::Node<'_, '_>> for StrictMetadata {
     type Error = Vec<MetadataError>;
 
     fn try_from(xml_metadata: &roxmltree::Node) -> Result<Self, Self::Error> {
-        let lenient = EpubLenientMetadata::from(xml_metadata);
+        let lenient = LenientMetadata::from(xml_metadata);
         Self::try_from(lenient)
     }
 }

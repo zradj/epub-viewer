@@ -6,17 +6,17 @@ use zip::{ZipArchive, read::ZipFile};
 
 use crate::{
     error::{EpubError, EpubResult},
-    metadata::EpubLenientMetadata,
+    metadata::LenientMetadata,
 };
 
 #[derive(Debug)]
-pub struct EpubBook {
-    pub metadata: EpubLenientMetadata,
+pub struct Book {
+    pub metadata: LenientMetadata,
     pub spine: Vec<SpineItem>,
-    resources: HashMap<String, EpubResource>,
+    resources: HashMap<String, Resource>,
 }
 
-impl EpubBook {
+impl Book {
     pub fn new<P: AsRef<Path>>(path: P) -> EpubResult<Self> {
         let archive = File::open(path)?;
         let mut archive = ZipArchive::new(archive)?;
@@ -41,20 +41,20 @@ impl EpubBook {
             None => "",
         };
 
-        let root_content = {
-            let mut root_file = archive.by_name(&package_path)?;
-            let mut root_content = String::new();
-            root_file.read_to_string(&mut root_content)?;
+        let package_content = {
+            let mut package_file = archive.by_name(&package_path)?;
+            let mut package_content = String::new();
+            package_file.read_to_string(&mut package_content)?;
 
-            root_content
+            package_content
         };
 
-        let root_doc = roxmltree::Document::parse(&root_content)?;
-        let root_element = root_doc.root_element();
+        let package_doc = roxmltree::Document::parse(&package_content)?;
+        let root_element = package_doc.root_element();
 
-        let mut metadata = EpubLenientMetadata::default();
+        let mut metadata = LenientMetadata::default();
         if let Some(meta_node) = root_element.children().find(|c| c.has_tag_name("metadata")) {
-            metadata = EpubLenientMetadata::from(&meta_node);
+            metadata = LenientMetadata::from(&meta_node);
         }
 
         let manifest_node = root_element
@@ -77,14 +77,14 @@ impl EpubBook {
 
         let spine = Self::read_spine(&spine_node, &id_to_path)?;
 
-        Ok(EpubBook {
+        Ok(Book {
             metadata,
             spine,
             resources,
         })
     }
 
-    pub fn resource(&self, path: &str) -> EpubResult<&EpubResource> {
+    pub fn resource(&self, path: &str) -> EpubResult<&Resource> {
         self.resources
             .get(path)
             .ok_or(EpubError::ResourceNotFound(String::from(path)))
@@ -94,7 +94,7 @@ impl EpubBook {
         &self,
         current_doc_path: &str,
         href: &str,
-    ) -> EpubResult<&EpubResource> {
+    ) -> EpubResult<&Resource> {
         if href.starts_with('/') || href.contains("://") {
             return self.resource(href);
         }
@@ -137,7 +137,7 @@ impl EpubBook {
         archive: &mut ZipArchive<File>,
         xml_manifest: &roxmltree::Node<'_, '_>,
         base_path: &str,
-    ) -> EpubResult<(HashMap<String, EpubResource>, HashMap<String, String>)> {
+    ) -> EpubResult<(HashMap<String, Resource>, HashMap<String, String>)> {
         let mut resources = HashMap::new();
         let mut id_to_path = HashMap::new();
 
@@ -163,7 +163,7 @@ impl EpubBook {
 
                 resources.insert(
                     path,
-                    EpubResource {
+                    Resource {
                         media_type: media_type.parse().unwrap(),
                         content: buf,
                     },
@@ -211,12 +211,12 @@ impl EpubBook {
 }
 
 #[derive(Debug)]
-pub struct EpubResource {
+pub struct Resource {
     pub media_type: MediaType,
     pub content: Vec<u8>,
 }
 
-impl EpubResource {
+impl Resource {
     pub fn is_text(&self) -> bool {
         match &self.media_type {
             MediaType::Xhtml
