@@ -11,7 +11,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct EpubBook {
-    pub metadata: EpubMetadata,
+    pub metadata: EpubLenientMetadata,
     pub spine: Vec<SpineItem>,
     resources: HashMap<String, EpubResource>,
 }
@@ -52,9 +52,9 @@ impl EpubBook {
         let root_doc = roxmltree::Document::parse(&root_content)?;
         let root_element = root_doc.root_element();
 
-        let mut metadata = EpubMetadata::default();
+        let mut metadata = EpubLenientMetadata::default();
         if let Some(meta_node) = root_element.children().find(|c| c.has_tag_name("metadata")) {
-            metadata = EpubMetadata::from(&meta_node);
+            metadata = EpubLenientMetadata::from(&meta_node);
         }
 
         let manifest_node = root_element

@@ -12,6 +12,7 @@ pub struct EpubLenientMetadata {
     pub publishers: Vec<String>,
     pub dates: Vec<String>,
     pub last_modified: Option<String>,
+    pub cover_image: Option<String>,
     pub parse_warnings: Vec<MetadataError>,
 }
 
@@ -56,6 +57,10 @@ impl From<&roxmltree::Node<'_, '_>> for EpubLenientMetadata {
                         }
                         res.last_modified = child.text().map(|lm| String::from(lm.trim()));
                     }
+
+                    if matches!(child.attribute("name"), Some("cover")) {
+                        res.cover_image = child.attribute("content").map(String::from);
+                    }
                 }
             }
         }
@@ -90,6 +95,7 @@ pub struct EpubStrictMetadata {
     pub languages: Vec<String>,
     pub publishers: Vec<String>,
     pub date: Option<String>,
+    pub cover_image: Option<String>,
     pub last_modified: String,
 }
 
@@ -110,6 +116,7 @@ impl TryFrom<EpubLenientMetadata> for EpubStrictMetadata {
                 languages: lenient.languages,
                 publishers: lenient.publishers,
                 date: lenient.dates.pop(),
+                cover_image: lenient.cover_image,
                 last_modified: lenient.last_modified.unwrap(),
             })
         }
