@@ -4,13 +4,19 @@ use crate::error::MetadataError;
 pub struct LenientMetadata {
     pub identifiers: Vec<String>,
     pub titles: Vec<String>,
+    pub languages: Vec<String>,
+    pub contributors: Vec<String>,
+    pub coverages: Vec<String>,
+    pub creators: Vec<String>,
+    pub dates: Vec<String>,
+    pub descriptions: Vec<String>,
+    pub formats: Vec<String>,
+    pub publishers: Vec<String>,
+    pub relations: Vec<String>,
+    pub rights: Vec<String>,
+    pub sources: Vec<String>,
     pub subjects: Vec<String>,
     pub types: Vec<String>,
-    pub creators: Vec<String>,
-    pub contributors: Vec<String>,
-    pub languages: Vec<String>,
-    pub publishers: Vec<String>,
-    pub dates: Vec<String>,
     pub last_modified: Option<String>,
     pub cover_image: Option<String>,
     pub parse_warnings: Vec<MetadataError>,
@@ -34,12 +40,10 @@ impl From<&roxmltree::Node<'_, '_>> for LenientMetadata {
                 match child.tag_name().name() {
                     "identifier" => push_trim(&mut res.identifiers, &child),
                     "title" => push_trim(&mut res.titles, &child),
-                    "subject" => push_trim(&mut res.subjects, &child),
-                    "type" => push_trim(&mut res.types, &child),
-                    "contributor" => push_trim(&mut res.contributors, &child),
-                    "creator" => push_trim(&mut res.creators, &child),
                     "language" => push_trim(&mut res.languages, &child),
-                    "publisher" => push_trim(&mut res.publishers, &child),
+                    "contributor" => push_trim(&mut res.contributors, &child),
+                    "coverage" => push_trim(&mut res.coverages, &child),
+                    "creator" => push_trim(&mut res.creators, &child),
                     "date" => {
                         if !res.dates.is_empty() {
                             res.parse_warnings.push(MetadataError::MultipleDates);
@@ -47,6 +51,14 @@ impl From<&roxmltree::Node<'_, '_>> for LenientMetadata {
 
                         push_trim(&mut res.dates, &child);
                     }
+                    "description" => push_trim(&mut res.descriptions, &child),
+                    "format" => push_trim(&mut res.formats, &child),
+                    "publisher" => push_trim(&mut res.publishers, &child),
+                    "relation" => push_trim(&mut res.relations, &child),
+                    "rights" => push_trim(&mut res.rights, &child),
+                    "source" => push_trim(&mut res.sources, &child),
+                    "subject" => push_trim(&mut res.subjects, &child),
+                    "type" => push_trim(&mut res.types, &child),
                     _ => (),
                 }
             } else {
@@ -88,15 +100,21 @@ impl From<&roxmltree::Node<'_, '_>> for LenientMetadata {
 pub struct StrictMetadata {
     pub identifiers: Vec<String>,
     pub titles: Vec<String>,
+    pub languages: Vec<String>,
+    pub contributors: Vec<String>,
+    pub coverages: Vec<String>,
+    pub creators: Vec<String>,
+    pub date: Option<String>,
+    pub descriptions: Vec<String>,
+    pub formats: Vec<String>,
+    pub publishers: Vec<String>,
+    pub relations: Vec<String>,
+    pub rights: Vec<String>,
+    pub sources: Vec<String>,
     pub subjects: Vec<String>,
     pub types: Vec<String>,
-    pub creators: Vec<String>,
-    pub contributors: Vec<String>,
-    pub languages: Vec<String>,
-    pub publishers: Vec<String>,
-    pub date: Option<String>,
-    pub cover_image: Option<String>,
     pub last_modified: String,
+    pub cover_image: Option<String>,
 }
 
 impl TryFrom<LenientMetadata> for StrictMetadata {
@@ -109,13 +127,19 @@ impl TryFrom<LenientMetadata> for StrictMetadata {
             Ok(StrictMetadata {
                 identifiers: lenient.identifiers,
                 titles: lenient.titles,
+                languages: lenient.languages,
+                contributors: lenient.contributors,
+                coverages: lenient.coverages,
+                creators: lenient.creators,
+                date: lenient.dates.pop(),
+                descriptions: lenient.descriptions,
+                formats: lenient.formats,
+                publishers: lenient.publishers,
+                relations: lenient.relations,
+                rights: lenient.rights,
+                sources: lenient.sources,
                 subjects: lenient.subjects,
                 types: lenient.types,
-                creators: lenient.creators,
-                contributors: lenient.contributors,
-                languages: lenient.languages,
-                publishers: lenient.publishers,
-                date: lenient.dates.pop(),
                 cover_image: lenient.cover_image,
                 last_modified: lenient.last_modified.unwrap(),
             })
